@@ -6,7 +6,11 @@ nixPkgs = ["python312", "postgresql"]
 
 [phases.install]
 dependsOn = ["setup"]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+  # Build and cache your flake environment
+  "nix develop -c true"
+]
+
 
 [start]
 cmd = "python manage.py migrate && gunicorn windborne_application.wsgi --bind 0.0.0.0:$PORT"
