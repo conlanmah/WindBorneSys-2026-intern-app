@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,7 +31,7 @@ SECRET_KEY = config('SECRET_KEY')
 # regenerate it.
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"] # Required by Railway
 
 
 # Application definition
@@ -79,7 +80,15 @@ WSGI_APPLICATION = "windborne_application.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get("PGDATABASE"),
+        'USER': os.environ.get("PGUSER"),
+        'PASSWORD': os.environ.get("PGPASSWORD"),
+        'HOST': os.environ.get("PGHOST"),
+        'PORT': os.environ.get("PGPORT"),
+    },
+    "old": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
