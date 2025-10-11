@@ -17,7 +17,6 @@
           pytest
           black
           python-decouple
-          railway
         ];
         pythonEnv = pkgs.python311.withPackages pythonPackages;
       in
@@ -26,6 +25,7 @@
           buildInputs = with pkgs; [
             pythonEnv
             sqlite
+            railway
           ];
           
           shellHook = ''
