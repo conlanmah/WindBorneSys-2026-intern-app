@@ -1,16 +1,18 @@
+# nixpacks.toml — Pure Nix runtime
 [variables]
+# Avoid Nixpacks' Python/Mise layer completely
 NIXPACKS_NO_MISE = "1"
+PYTHONUNBUFFERED = "1"
+DJANGO_SETTINGS_MODULE = "windborne_application.settings"
 
 [phases.setup]
-nixPkgs = ["python312", "postgresql"]
+# Provide minimal tools so we can run nix commands
+nixPkgs = ["nix", "bash", "coreutils"]
 
 [phases.install]
-dependsOn = ["setup"]
-cmds = [
-  # Build and cache your flake environment
-  "nix develop -c true"
-]
-
+# Pre-load/realize the flake environment (optional but warms cache)
+cmds = ["nix develop -c true"]
 
 [start]
-cmd = "python manage.py migrate && gunicorn windborne_application.wsgi --bind 0.0.0.0:$PORT"
+# Run inside your flake environment
+cmd = "nix develop -c bash -lc 'python manage.py migrate && python manage.py collectstatic --noinput && gunicorn windborne_application.wsgi:application --bind 0.0.0.0:$PORT'"
