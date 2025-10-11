@@ -18,7 +18,7 @@
           black
           python-decouple
         ];
-        pythonEnv = pkgs.python311.withPackages pythonPackages;
+        pythonEnv = pkgs.python312.withPackages pythonPackages;
       in
       {
         devShells.default = pkgs.mkShell {
