@@ -2,7 +2,7 @@
   description = "Simple Django project with Nix";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -25,7 +25,8 @@
           buildInputs = with pkgs; [
             pythonEnv
             sqlite
-            # railway # Need the most up to date version.
+            railway # Need the most up to date version, which is in unstable.
+            # Use this: nix shell github:NixOS/nixpkgs/nixos-unstable#railway
           ];
           
           shellHook = ''
