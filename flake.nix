@@ -25,7 +25,7 @@
           buildInputs = with pkgs; [
             pythonEnv
             sqlite
-            railway
+            # railway # Need the most up to date version.
           ];
           
           shellHook = ''
