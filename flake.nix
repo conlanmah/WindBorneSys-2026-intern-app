@@ -26,7 +26,6 @@
             pythonEnv
             sqlite
             railway # Need the most up to date version, which is in unstable.
-            # Use this: nix shell github:NixOS/nixpkgs/nixos-unstable#railway
           ];
           
           shellHook = ''
