@@ -16,6 +16,7 @@
           whitenoise
           pytest
           black
+          python-decouple
         ];
         pythonEnv = pkgs.python311.withPackages pythonPackages;
       in
