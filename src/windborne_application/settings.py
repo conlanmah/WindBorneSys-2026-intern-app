@@ -24,6 +24,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
+# Moved to envrc out of an abundance of caution, not really necessary since
+# this shouldn't be doing any authenticaiton or storing of sensitive data.
+# Also someone that understands the basics of git could find it if I don't
+# regenerate it.
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = []

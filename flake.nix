@@ -33,6 +33,7 @@
             echo "Run migrations: python manage.py migrate"
             echo "Start server: python manage.py runserver"
           '';
+          SECRET_KEY="django-insecure-*1$sy8^^5dj1_rysnpu6gjpjbfo8b0*l3o+_o3xww+4iw6_qna";
         };
       });
 }
