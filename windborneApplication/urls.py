@@ -17,7 +17,22 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path
+from django.http import HttpResponse
+
+def home(request):
+    return HttpResponse("""
+    <html>
+        <head>
+            <title>WindBorne Application</title>
+        </head>
+        <body>
+            <h1>🚀 WindBorne Application</h1>
+            <p>Welcome to the WindBorne Systems internship application portal.</p>
+        </body>
+    </html>
+    """)
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # path("admin/", admin.site.urls),
+    path('', home, name='home'),
 ]
