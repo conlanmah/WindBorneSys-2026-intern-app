@@ -23,7 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['*'] # Required by Railway
+ALLOWED_HOSTS = [
+    'windborne-applicaiton-production.up.railway.app',
+    '127.0.0.1',
+    'localhost',
+] # Required by Railway
 
 # Database configuration, should end up not using the database at all
 DATABASES = {
