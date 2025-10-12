@@ -26,8 +26,8 @@ def home(request):
             <title>WindBorne Application</title>
         </head>
         <body>
-            <h1>🚀 WindBorne Application</h1>
-            <p>Welcome to the WindBorne Systems internship application portal.</p>
+            <h1>Test page</h1>
+            <p>woo this works!</p>
         </body>
     </html>
     """)
