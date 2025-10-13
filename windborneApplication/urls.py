@@ -23,4 +23,5 @@ from app import views
 urlpatterns = [
     # path("admin/", admin.site.urls),
     path('', views.map_view, name='home'),
+    path('points/', views.points_proxy, name='points-proxy'),
 ]
