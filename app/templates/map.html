@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>World Points Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet CSS/JS (no build tools needed) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+    defer
+  ></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100vh; width: 100vw; }
+    .topbar {
+      position: absolute; z-index: 1000; top: 10px; left: 50%;
+      transform: translateX(-50%); background: white; padding: 6px 10px;
+      border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      display: flex; gap: 8px; align-items: center;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; }
+    .status-dot.ok { background: #2ecc71; }
+    .status-dot.err { background: #e74c3c; }
+    .legend {
+      position: absolute; z-index: 1000; bottom: 12px; left: 12px;
+      background: white; padding: 8px 12px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="topbar">
+    <div id="status-dot" class="status-dot" aria-hidden="true"></div>
+    <span id="status-text">Loading points…</span>
+    <button id="refresh-btn" type="button">Refresh</button>
+  </div>
+
+  <div class="legend">
+    <strong>Legend</strong><br/>
+    Circles show points from the API.<br/>
+    Popup shows the third value (e.g., magnitude).
+  </div>
+
+  <script>
+    // Values passed from Django (may be blank if not configured)
+    const DIRECT_API_URL = "{{ api_url|escapejs }}";   // e.g. "https://example.com/api/points"
+    const PROXY_URL = "{% url 'points-proxy' %}";      // always available as fallback
+
+    // Prefer direct API if provided; fallback to proxy if direct fails/CORS blocked.
+    async function fetchPoints() {
+      const candidates = [];
+      if (DIRECT_API_URL) candidates.push(DIRECT_API_URL);
+      candidates.push(PROXY_URL);
+
+      let lastError = null;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!Array.isArray(data)) throw new Error('Response is not a JSON array');
+          return data;
+        } catch (err) {
+          lastError = err;
+          // try next candidate
+        }
+      }
+      throw lastError || new Error("Could not fetch points");
+    }
+
+    // Initialize the map
+    const map = L.map('map', {
+      worldCopyJump: true, // nicer wrap-around behavior near +/-180°
+    }).setView([20, 0], 2);
+
+    // Basemap tiles (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 5,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let markersLayer = L.layerGroup().addTo(map);
+
+    function setStatus(ok, msg) {
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      dot.classList.remove('ok', 'err');
+      dot.classList.add(ok ? 'ok' : 'err');
+      text.textContent = msg;
+    }
+
+    function magnitudeToRadius(v) {
+      // simple scale: 2px to 12px
+      const val = Number(v);
+      if (!isFinite(val)) return 6;
+      const clamped = Math.max(0, Math.min(val, 50));
+      return 2 + (clamped / 50) * 10;
+    }
+
+    function plotPoints(points) {
+      markersLayer.clearLayers();
+
+      const bounds = [];
+      points.forEach((row, idx) => {
+        // Expecting [lat, lon, value]
+        const [lat, lon, val] = row;
+        if (!isFinite(lat) || !isFinite(lon)) return;
+
+        const circle = L.circleMarker([lat, lon], {
+          radius: magnitudeToRadius(val),
+          weight: 1,
+          opacity: 0.9,
+          fillOpacity: 0.6
+        });
+
+        circle.bindPopup(
+          `<strong>Point ${idx + 1}</strong><br/>Lat: ${lat.toFixed(4)}<br/>Lon: ${lon.toFixed(4)}` +
+          (val !== undefined ? `<br/>Value: ${Number(val).toFixed(3)}` : '')
+        );
+
+        circle.addTo(markersLayer);
+        bounds.push([lat, lon]);
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 4 });
+      }
+    }
+
+    async function loadAndRender() {
+      try {
+        setStatus(false, "Loading points…");
+        const data = await fetchPoints();
+        plotPoints(data);
+        setStatus(true, `Loaded ${data.length} point${data.length === 1 ? '' : 's'}.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(false, "Failed to load points.");
+        alert("Could not load points from the API.");
+      }
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', loadAndRender);
+
+    // Initial load
+    window.addEventListener('load', loadAndRender);
+  </script>
+</body>
+</html>
