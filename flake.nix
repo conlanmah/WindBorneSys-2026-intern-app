@@ -17,6 +17,7 @@
           pytest
           black
           python-decouple
+          requests
         ];
         pythonEnv = pkgs.python312.withPackages pythonPackages;
       in
