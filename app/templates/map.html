@@ -46,6 +46,7 @@
     <div id="status-dot" class="status-dot" aria-hidden="true"></div>
     <span id="status-text">Loading points…</span>
     <button id="refresh-btn" type="button">Refresh</button>
+    <button id="load-sat-btn" type="button">Load Satellites</button>
   </div>
 
   <div class="legend">
@@ -55,6 +56,11 @@
   </div>
 
   <script>
+
+    ////////////////////////////////////
+    // MAP STUFF ///////////////////////
+    //////////////////////////////
+
     // Values passed from Django (may be blank if not configured)
     const DIRECT_API_URL = "{{ api_url|escapejs }}";   // e.g. "https://example.com/api/points"
     const PROXY_URL = "{% url 'points-proxy' %}";      // always available as fallback
@@ -140,6 +146,64 @@
       }
     }
 
+    document.getElementById('refresh-btn').addEventListener('click', loadAndRender);
+
+    //////////////////////////////////////////
+    ////////// N2YO satellites //////////////
+    //////////////////////////////////////////
+
+    let satLayer = L.layerGroup().addTo(map);
+
+    async function fetchSatellites() {
+      const res = await fetch("{% url 'satellite-positions' %}", {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Sat response is not a JSON array');
+      return data;
+    }
+
+    function plotSatellites(sats) {
+      satLayer.clearLayers();
+      const bounds = [];
+
+      sats.forEach(s => {
+        if (!isFinite(s.lat) || !isFinite(s.lon)) return;
+
+        const m = L.marker([s.lat, s.lon]);
+        m.bindPopup(
+          `<strong>${s.name || s.id}</strong><br/>` +
+          `Lat: ${s.lat.toFixed(4)}<br/>Lon: ${s.lon.toFixed(4)}` +
+          (isFinite(s.alt_km) ? `<br/>Alt: ${s.alt_km.toFixed(2)} km` : '')
+        );
+        m.addTo(satLayer);
+        bounds.push([s.lat, s.lon]);
+      });
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 4 });
+      }
+    }
+
+    async function loadSatellites() {
+      try {
+        setStatus(false, "Loading satellites…");
+        const sats = await fetchSatellites();
+        plotSatellites(sats);
+        setStatus(true, `Loaded ${sats.length} satellite${sats.length === 1 ? '' : 's'}.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(false, "Failed to load satellites.");
+        alert("Could not load satellites from the API.");
+      }
+    }
+
+    document.getElementById('load-sat-btn').addEventListener('click', loadSatellites);
+
+
+
     async function loadAndRender() {
       try {
         setStatus(false, "Loading points…");
@@ -152,9 +216,6 @@
         alert("Could not load points from the API.");
       }
     }
-
-    document.getElementById('refresh-btn').addEventListener('click', loadAndRender);
-
     // Initial load
     window.addEventListener('load', loadAndRender);
   </script>

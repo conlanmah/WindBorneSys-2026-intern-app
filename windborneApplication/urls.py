@@ -23,5 +23,10 @@ from app import views
 urlpatterns = [
     # path("admin/", admin.site.urls),
     path('', views.map_view, name='home'),
+
+    # Windborne Baloons
     path('points/', views.points_proxy, name='points-proxy'),
+
+    # N2YO satellites
+    path('satellites/', views.satellite_positions, name='satellite-positions'),
 ]

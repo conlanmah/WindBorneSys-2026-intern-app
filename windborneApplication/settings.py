@@ -13,6 +13,28 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 from decouple import config
 
+################################
+######################### N2YO
+################################
+
+N2YO_API_KEY = config("N2YO_API_KEY", default="")
+# Observer location, required by N2YO:
+N2YO_OBSERVER = {
+    "lat": 37.7749,     # San Francisco
+    "lon": -122.4194,
+    "alt_km": 0.015     # ~15 m
+}
+# The satellites to plot, keep small to preserver API limits
+SATELLITES = [
+    {"id": 25544, "name": "ISS (ZARYA)"},
+    {"id": 33591, "name": "HST (Hubble)"},
+    {"id": 20580, "name": "NOAA 12"},
+]
+# How many seconds of positions to request (1 = single current point)
+N2YO_SECONDS = 1
+
+###############################
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
