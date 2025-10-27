@@ -37,6 +37,9 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
+    
+    /*For satellite icon*/
+    .sat-emoji-icon { font-size: 22px; line-height: 24px; text-align: center; }    
   </style>
 </head>
 <body>
@@ -152,6 +155,14 @@
     ////////// N2YO satellites //////////////
     //////////////////////////////////////////
 
+    const satDivIcon = L.divIcon({
+      html: '🛰️',
+      className: 'sat-emoji-icon',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      popupAnchor: [0, -12]
+    });
+
     let satLayer = L.layerGroup().addTo(map);
 
     async function fetchSatellites() {
@@ -171,8 +182,7 @@
 
       sats.forEach(s => {
         if (!isFinite(s.lat) || !isFinite(s.lon)) return;
-
-        const m = L.marker([s.lat, s.lon]);
+          const m = L.marker([s.lat, s.lon], { icon: satDivIcon });
         m.bindPopup(
           `<strong>${s.name || s.id}</strong><br/>` +
           `Lat: ${s.lat.toFixed(4)}<br/>Lon: ${s.lon.toFixed(4)}` +
@@ -218,6 +228,7 @@
     }
     // Initial load
     window.addEventListener('load', loadAndRender);
+    window.addEventListener('load', loadSatellites);
   </script>
 </body>
 </html>
