@@ -64,6 +64,22 @@
     // MAP STUFF ///////////////////////
     //////////////////////////////
 
+    const balloonIcon = L.divIcon({
+      html: '🎈',
+      className: 'balloon-icon',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],   // center the emoji on its coordinates
+      popupAnchor: [0, -12]
+    });
+
+    const satDivIcon = L.divIcon({
+      html: '🛰️',
+      className: 'sat-emoji-icon',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      popupAnchor: [0, -12]
+    });
+
     // Values passed from Django (may be blank if not configured)
     const DIRECT_API_URL = "{{ api_url|escapejs }}";   // e.g. "https://example.com/api/points"
     const PROXY_URL = "{% url 'points-proxy' %}";      // always available as fallback
@@ -101,7 +117,7 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let markersLayer = L.layerGroup().addTo(map);
+    let balloonsLayer = L.layerGroup().addTo(map);
 
     function setStatus(ok, msg) {
       const dot = document.getElementById('status-dot');
@@ -120,7 +136,7 @@
     }
 
     function plotPoints(points) {
-      markersLayer.clearLayers();
+      balloonsLayer.clearLayers();
 
       const bounds = [];
       points.forEach((row, idx) => {
@@ -128,19 +144,14 @@
         const [lat, lon, val] = row;
         if (!isFinite(lat) || !isFinite(lon)) return;
 
-        const circle = L.circleMarker([lat, lon], {
-          radius: magnitudeToRadius(val),
-          weight: 1,
-          opacity: 0.9,
-          fillOpacity: 0.6
-        });
+        const balloon = L.marker([pt.lat, pt.lon], { icon: balloonIcon });
 
-        circle.bindPopup(
+        balloon.bindPopup(
           `<strong>Point ${idx + 1}</strong><br/>Lat: ${lat.toFixed(4)}<br/>Lon: ${lon.toFixed(4)}` +
           (val !== undefined ? `<br/>Value: ${Number(val).toFixed(3)}` : '')
         );
 
-        circle.addTo(markersLayer);
+        balloon.addTo(balloonsLayer);
         bounds.push([lat, lon]);
       });
 
@@ -154,14 +165,6 @@
     //////////////////////////////////////////
     ////////// N2YO satellites //////////////
     //////////////////////////////////////////
-
-    const satDivIcon = L.divIcon({
-      html: '🛰️',
-      className: 'sat-emoji-icon',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12]
-    });
 
     let satLayer = L.layerGroup().addTo(map);
 
