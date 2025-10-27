@@ -7,6 +7,8 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render
 from django.conf import settings
 
+from django.views.decorators.cache import cache_page
+
 logger = logging.getLogger(__name__)
 
 # Set this in your env, e.g. POINTS_API_URL="https://example.com/api/points"
@@ -20,8 +22,9 @@ def map_view(request):
     """
     return render(request, "map.html", {"api_url": POINTS_API_URL})
 
+@cache_page(3600) # Cache for 1 hour
 @require_GET
-def points_proxy(request):
+def balloons_proxy(request):
     """
     Simple GET proxy to avoid CORS issues.
     Fetches from POINTS_API_URL and returns the data as-is.
@@ -49,7 +52,7 @@ def points_proxy(request):
 # N2YO plotting ########
 ########################
 
-
+@cache_page(300) # Cache for 5 min
 @require_GET
 def satellite_positions(request):
     """

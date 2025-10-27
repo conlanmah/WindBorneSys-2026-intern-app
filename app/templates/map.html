@@ -42,6 +42,43 @@
     .sat-emoji-icon { font-size: 22px; line-height: 24px; text-align: center; }    
     /* For balloon icon */
       .balloon-icon { font-size: 22px; line-height: 22px; text-align: center; }
+  
+    .legend.dist-gradient {
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      border-radius: 10px;
+      font: 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .legend-bar {
+      width: 220px;
+      height: 12px;
+      border-radius: 999px;
+      /* Match JS: 100 km (green h=130) → 10k km (red h=0) */
+      background: linear-gradient(to right,
+        hsl(130 90% 45%),
+        hsl(110 90% 45%),
+        hsl(80 90% 47%),
+        hsl(55 95% 50%),
+        hsl(30 95% 52%),
+        hsl(15 95% 50%),
+        hsl(0 90% 45%)
+      );
+      margin-bottom: 6px;
+    }
+    .legend-ticks {
+      display: flex;
+      justify-content: space-between;
+      width: 220px;
+      font-size: 11px;
+      opacity: 0.9;
+    }
+    .legend-ticks span { user-select: none; }
   </style>
 </head>
 <body>
@@ -54,16 +91,10 @@
     <button id="load-sat-btn" type="button">Load Satellites</button>
   </div>
 
-  <div class="legend">
-    <strong>Legend</strong><br/>
-      🎈 shows points from the API.<br/>
-      Popup shows the altitude.
-  </div>
-
   <script>
 
     ////////////////////////////////////
-    // MAP STUFF ///////////////////////
+    // Constants ///////////////////////
     //////////////////////////////
 
     const balloonIcon = L.divIcon({
@@ -86,29 +117,159 @@
     const DIRECT_API_URL = "{{ api_url|escapejs }}";   // e.g. "https://example.com/api/points"
     const PROXY_URL = "{% url 'points-proxy' %}";      // always available as fallback
 
-    // Prefer direct API if provided; fallback to proxy if direct fails/CORS blocked.
-    async function fetchPoints() {
-      const candidates = [];
-      if (DIRECT_API_URL) candidates.push(DIRECT_API_URL);
-      candidates.push(PROXY_URL);
+    const EARTH_R_KM = 6371.0;
 
-      let lastError = null;
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          if (!Array.isArray(data)) throw new Error('Response is not a JSON array');
-          return data;
-        } catch (err) {
-          lastError = err;
-          // try next candidate
-        }
-      }
-      throw lastError || new Error("Could not fetch points");
+    const TILE_DEG = 2; // tile size in degrees; tweak 1–4 for density/perf
+
+    ////////////////////////////////////////
+    ////////////// Globals ////////////////
+    ///////////////////////////////////////
+
+    // Keep raw arrays for recompute
+    let balloonsData = []; // array of {lat, lon, alt_km, idx}
+    let satGrid = null; // Map "latTile:lonTile" -> array of sat objects
+    let satsData = [];  // [{id,name,lat,lon,alt_km}, ...]
+
+    //////////////////////////////////
+    ///////////// Helper functions //
+    /////////////////////////////////
+
+
+    function toRad(d) { return d * Math.PI / 180; }
+
+    // ECEF conversion using a spherical Earth + altitude (km)
+    function toECEF(latDeg, lonDeg, altKm = 0) {
+      const lat = toRad(latDeg);
+      const lon = toRad(lonDeg);
+      const r = EARTH_R_KM + (Number.isFinite(altKm) ? altKm : 0);
+      const cosLat = Math.cos(lat);
+      return {
+        x: r * cosLat * Math.cos(lon),
+        y: r * cosLat * Math.sin(lon),
+        z: r * Math.sin(lat),
+      };
     }
 
-    // Initialize the map
+    function dist3D_km(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+      return Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    // Normalize balloon altitude guess:
+    // - If alt is undefined => assume ~0.02 km (20 m)
+    // - If alt > 1000 => treat as meters; convert to km
+    function normalizeBalloonAltKm(rawAlt) {
+      if (!Number.isFinite(rawAlt)) return 0.02;
+      return rawAlt > 1000 ? (rawAlt / 1000.0) : rawAlt;
+    }
+
+   
+    function toTile(lat, lon) {
+      // normalize lon to [-180,180)
+      let L = lon;
+      if (L >= 180) L -= 360;
+      if (L < -180) L += 360;
+      const tLat = Math.floor(lat / TILE_DEG);
+      const tLon = Math.floor(L / TILE_DEG);
+      return [tLat, tLon];
+    }
+
+    function tileKey(tLat, tLon) { return `${tLat}:${tLon}`; }
+
+    function buildSatIndexGrid() {
+      satGrid = new Map();
+      for (const s of satsData) {
+        if (!Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
+        const [tLat, tLon] = toTile(s.lat, s.lon);
+        const key = tileKey(tLat, tLon);
+        if (!satGrid.has(key)) satGrid.set(key, []);
+        satGrid.get(key).push(s);
+      }
+    }
+
+    // Expand outward in tile “rings” until we find candidates.
+    function* tilesAround(lat, lon, maxRings = 90 /* safe upper bound */) {
+      const [cLat, cLon] = toTile(lat, lon);
+      yield [cLat, cLon];
+
+      for (let r = 1; r <= maxRings; r++) {
+        for (let dLon = -r; dLon <= r; dLon++) {
+          const ringTop = [cLat + r, cLon + dLon];
+          const ringBottom = [cLat - r, cLon + dLon];
+          yield ringTop;
+          yield ringBottom;
+        }
+        for (let dLat = -r + 1; dLat <= r - 1; dLat++) {
+          const ringLeft = [cLat + dLat, cLon - r];
+          const ringRight = [cLat + dLat, cLon + r];
+          yield ringLeft;
+          yield ringRight;
+        }
+      }
+    }
+
+    // Find nearest satellite by expanding tile search and then 3D slant range
+    function nearestSatFor(lat, lon, balloonAltKm) {
+      if (!satGrid || !satGrid.size) return null;
+
+      const bECEF = toECEF(lat, lon, balloonAltKm ?? 0);
+
+      let best = null;
+      let checked = 0;
+
+      for (const [tLat, tLon] of tilesAround(lat, lon)) {
+        const key = tileKey(tLat, tLon);
+        const bucket = satGrid.get(key);
+        if (!bucket || !bucket.length) continue;
+
+        for (const s of bucket) {
+          const sAlt = Number.isFinite(s.alt_km) ? s.alt_km : 0;
+          const sECEF = toECEF(s.lat, s.lon, sAlt);
+          const d = dist3D_km(bECEF, sECEF);
+          checked++;
+          if (!best || d < best.distance_km) best = { sat: s, distance_km: d };
+        }
+
+        // Heuristic exit: if we’ve checked a reasonable number
+        // (e.g., once we’ve seen ~50+ candidates), stop — we likely have the nearest.
+        if (checked > 60 && best) break;
+      }
+
+      return best;
+    }
+
+    function best3D(lat, lon, balloonAltKm, candidates) {
+      const b = toECEF(lat, lon, balloonAltKm ?? 0);
+      let best = null;
+      for (const s of candidates) {
+        const sAlt = Number.isFinite(s.alt_km) ? s.alt_km : 0;
+        const se = toECEF(s.lat, s.lon, sAlt);
+        const d = dist3D_km(b, se);
+        if (!best || d < best.distance_km) best = { sat: s, distance_km: d };
+      }
+      return best;
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    
+    ///////// Color related
+    /**
+     * Map distance (km) → CSS hsl color.
+     * 100 km → green (h=130), 10,000 km → red (h=0).
+     * Unknown/Infinity → gray.
+     */
+    function colorForDistKmGradient(d) {
+      if (!Number.isFinite(d)) return "hsl(210 5% 65%)"; // gray
+      const dMin = 100, dMax = 10000;
+      const t = clamp((d - dMin) / (dMax - dMin), 0, 1);
+      const hue = lerp(130, 0, t); // 130→0
+      return `hsl(${hue} 90% 45%)`;
+    }
+
+    ///////////////////////////////////////
+    ////////// Map Initialization //////////
+    ///////////////////////////////////////
     const map = L.map('map', {
       worldCopyJump: true, // nicer wrap-around behavior near +/-180°
     }).setView([20, 0], 2);
@@ -119,7 +280,6 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let balloonsLayer = L.layerGroup().addTo(map);
 
     function setStatus(ok, msg) {
       const dot = document.getElementById('status-dot');
@@ -128,41 +288,172 @@
       dot.classList.add(ok ? 'ok' : 'err');
       text.textContent = msg;
     }
+    //////////////////////////////////////////////
+    ////////////// Balloons ////////////////////////
+    ////////////////////////////////////////////////
 
-    function magnitudeToRadius(v) {
-      // simple scale: 2px to 12px
-      const val = Number(v);
-      if (!isFinite(val)) return 6;
-      const clamped = Math.max(0, Math.min(val, 50));
-      return 2 + (clamped / 50) * 10;
+    function nearestDistKmForBalloon(b) {
+      const alt = Number.isFinite(b.alt_km) ? b.alt_km : undefined;
+      const res = nearestSatFor(b.lat, b.lon, alt);
+      return res ? res.distance_km : Infinity;
     }
 
-    function plotPoints(points) {
-      balloonsLayer.clearLayers();
-
-      const bounds = [];
-      points.forEach((row, idx) => {
-        // Expecting [lat, lon, value]
-        const [lat, lon, alt] = row;
-        if (!isFinite(lat) || !isFinite(lon)) return;
-
-        const balloon = L.marker([lat, lon], { icon: balloonIcon });
-
-        balloon.bindPopup(
-          `<strong>Point ${idx + 1}</strong><br/>Lat: ${lat.toFixed(4)}<br/>Lon: ${lon.toFixed(4)}` +
-          (alt !== undefined ? `<br/>Alt: ${Number(alt).toFixed(3)}` : '')
-        );
-
-        balloon.addTo(balloonsLayer);
-        bounds.push([lat, lon]);
+    function applyBalloonStyle(b) {
+      const d = nearestDistKmForBalloon(b);
+      b.nearest_km = d; // cache if you want to show it elsewhere
+      const color = colorForDistKmGradient(d);
+      // Tweak radius/opacity to taste
+      b.marker.setStyle({
+        color,
+        fillColor: color,
+        fillOpacity: 0.85,
+        weight: 1.5,
+        radius: 7
       });
+    }
 
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 4 });
+    // Prefer proxy if provided; fallback to direct access, but CORS doesn't allow this
+    async function fetchBalloons() {
+      const candidates = [];
+      candidates.push(PROXY_URL);
+      if (DIRECT_API_URL) candidates.push(DIRECT_API_URL);
+
+      let lastError = null;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!Array.isArray(data)) throw new Error('Response is not a JSON array');
+
+          // 👇 Normalize to objects the rest of the app expects
+          const normalized = data.map((row, i) => {
+            if (Array.isArray(row)) {
+              const [lat, lon, alt] = row;
+              return {
+                id: i + 1,
+                lat: Number(lat),
+                lon: Number(lon),
+                alt_km: normalizeBalloonAltKm(Number(alt)),
+              };
+            } else {
+              return {
+                id: row.id ?? row.name ?? String(i + 1),
+                lat: Number(row.lat ?? row.latitude),
+                lon: Number(row.lon ?? row.lng ?? row.longitude),
+                alt_km: normalizeBalloonAltKm(Number(row.alt_km ?? row.alt ?? row.altitude)),
+              };
+            }
+          }).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+
+          return normalized;
+        } catch (err) {
+          lastError = err;
+          // try next candidate
+        }
+      }
+      throw lastError || new Error("Could not fetch points");
+    }
+
+    let balloonsLayer = L.layerGroup().addTo(map);
+
+    function plotBalloons(balloons) {
+      balloonsLayer.clearLayers();
+      balloonsData = [];
+
+      for (const raw of balloons) {
+        const b = {
+          id: raw.id ?? String(Math.random()),
+          lat: Number(raw.lat),
+          lon: Number(raw.lon),
+          alt_km: Number.isFinite(raw.alt_km) ? raw.alt_km : undefined,
+        };
+        if (!Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
+
+        const marker = L.circleMarker([b.lat, b.lon], {
+          radius: 7,
+          color: "#888",
+          fillColor: "#888",
+          fillOpacity: 0.85,
+          weight: 1.5
+        });
+
+        // for updateBalloonPopups()
+        marker._balloonMeta = { lat: b.lat, lon: b.lon, alt_km: b.alt_km, idx: balloonsData.length };
+
+        // Popup uses cached nearest once we compute it
+        marker.bindPopup(() => {
+          const d = Number.isFinite(b.nearest_km) ? `${b.nearest_km.toFixed(0)} km` : "—";
+          const alt = Number.isFinite(b.alt_km) ? `${b.alt_km.toFixed(2)} km` : "—";
+          return `
+            <div style="min-width:180px">
+              <div style="font-weight:600;">Balloon ${b.id}</div>
+              <div>Altitude: ${alt}</div>
+              <div>Nearest satellite: ${d}</div>
+            </div>`;
+        });
+
+        b.marker = marker;
+        marker.addTo(balloonsLayer);
+        balloonsData.push(b);
+      }
+
+      refreshBalloonStyles();
+    }
+
+    async function loadBalloons() {
+      try {
+        setStatus(false, "Loading points…");
+        const data = await fetchBalloons();
+        plotBalloons(data);
+        setStatus(true, `Loaded ${data.length} point${data.length === 1 ? '' : 's'}.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(false, "Failed to load points.");
+        alert("Could not load points from the API.");
       }
     }
 
-    document.getElementById('refresh-btn').addEventListener('click', loadAndRender);
+    function updateBalloonPopups() {
+      balloonsLayer.eachLayer(marker => {
+        const meta = marker._balloonMeta;
+        if (!meta) return;
+
+        const { lat, lon, alt_km, idx } = meta;
+
+        const hasSats = satGrid && satGrid.size > 0;
+        const basePopup =
+          `<strong>Balloon ${Number.isFinite(idx) ? idx + 1 : ""}</strong>` +
+          (Number.isFinite(lat) ? `<br/>Lat: ${lat.toFixed(4)}` : "") +
+          (Number.isFinite(lon) ? `<br/>Lon: ${lon.toFixed(4)}` : "") +
+          (Number.isFinite(alt_km) ? `<br/>Altitude: ${alt_km.toFixed(2)} km` : "");
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !hasSats) {
+          marker.bindPopup(basePopup);
+          return;
+        }
+
+        const best = nearestSatFor(lat, lon, alt_km);
+        if (!best) {
+          marker.bindPopup(basePopup);
+          return;
+        }
+
+        const { sat, distance_km } = best;
+        marker.bindPopup(
+          basePopup +
+          `<br/><br/><em>Nearest satellite</em>: ${sat.name}` +
+          (Number.isFinite(distance_km) ? `<br/>Distance: ${distance_km.toFixed(1)} km` : "")
+        );
+      });
+    }
+
+    function refreshBalloonStyles() {
+      if (!Array.isArray(balloonsData)) return;
+      balloonsData.forEach(applyBalloonStyle);
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', loadBalloons);
 
     //////////////////////////////////////////
     ////////// N2YO satellites //////////////
@@ -171,35 +462,58 @@
     let satLayer = L.layerGroup().addTo(map);
 
     async function fetchSatellites() {
-      const res = await fetch("{% url 'satellite-positions' %}", {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
+      const res = await fetch("/satellites/", { headers: { "Accept": "application/json" }, cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
-      if (!Array.isArray(data)) throw new Error('Sat response is not a JSON array');
-      return data;
+      const arr = Array.isArray(data) ? data
+                : Array.isArray(data.satellites) ? data.satellites
+                : Array.isArray(data.sats) ? data.sats
+                : Array.isArray(data.positions) ? data.positions
+                : null;
+      if (!arr) throw new Error("Sat response is not an array");
+
+      return arr.map((s, i) => ({
+        id: s.id ?? i,
+        name: s.name ?? String(s.id ?? i),
+        lat: Number(s.lat),
+        lon: Number(s.lon),
+        alt_km: Number.isFinite(Number(s.alt_km)) ? Number(s.alt_km) : 0,
+      })).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon));
     }
 
     function plotSatellites(sats) {
       satLayer.clearLayers();
-      const bounds = [];
+      satsData = [];
 
+      const bounds = [];
       sats.forEach(s => {
         if (!isFinite(s.lat) || !isFinite(s.lon)) return;
-          const m = L.marker([s.lat, s.lon], { icon: satDivIcon });
+        const sat = {
+          id: s.id,
+          name: s.name || String(s.id),
+          lat: s.lat, lon: s.lon,
+          alt_km: Number.isFinite(s.alt_km) ? s.alt_km : 0,
+        };
+        satsData.push(sat);
+
+        const m = L.marker([sat.lat, sat.lon], { icon: satDivIcon });
         m.bindPopup(
-          `<strong>${s.name || s.id}</strong><br/>` +
-          `Lat: ${s.lat.toFixed(4)}<br/>Lon: ${s.lon.toFixed(4)}` +
-          (isFinite(s.alt_km) ? `<br/>Alt: ${s.alt_km.toFixed(2)} km` : '')
+          `<strong>${sat.name}</strong><br/>` +
+          `Lat: ${sat.lat.toFixed(4)}<br/>Lon: ${sat.lon.toFixed(4)}` +
+          (Number.isFinite(sat.alt_km) ? `<br/>Alt: ${sat.alt_km.toFixed(2)} km` : '')
         );
         m.addTo(satLayer);
-        bounds.push([s.lat, s.lon]);
+        bounds.push([sat.lat, sat.lon]);
       });
 
-      if (bounds.length) {
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 4 });
-      }
+
+      if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 4 });
+
+      buildSatIndexGrid();
+      refreshBalloonStyles();
+      // Satellites updated – recompute balloon popups
+      updateBalloonPopups();
     }
 
     async function loadSatellites() {
@@ -217,23 +531,31 @@
 
     document.getElementById('load-sat-btn').addEventListener('click', loadSatellites);
 
-
-
-    async function loadAndRender() {
-      try {
-        setStatus(false, "Loading points…");
-        const data = await fetchPoints();
-        plotPoints(data);
-        setStatus(true, `Loaded ${data.length} point${data.length === 1 ? '' : 's'}.`);
-      } catch (err) {
-        console.error(err);
-        setStatus(false, "Failed to load points.");
-        alert("Could not load points from the API.");
-      }
-    }
-    // Initial load
-    window.addEventListener('load', loadAndRender);
+    // Initial loads
+    window.addEventListener('load', loadBalloons);
     window.addEventListener('load', loadSatellites);
+
+    ///////////////////////////////////////////////////
+    ///////////////////////// ADD Distance Legned
+    ////////////////////////////////////////////////////
+
+    const distanceLegend = L.control({ position: "bottomright" });
+    distanceLegend.onAdd = function() {
+      const div = L.DomUtil.create("div", "legend dist-gradient");
+      div.innerHTML = `
+        <div class="legend-title">Nearest Satellite Distance (km)</div>
+        <div class="legend-bar"></div>
+        <div class="legend-ticks">
+          <span>1k</span>
+          <span>5k</span>
+          <span>10k</span>
+        </div>
+      `;
+      return div;
+    };
+    distanceLegend.addTo(map);
+    distanceLegend.setPosition("bottomleft");
+
   </script>
 </body>
 </html>
