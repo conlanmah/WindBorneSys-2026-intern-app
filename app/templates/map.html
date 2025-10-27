@@ -261,7 +261,7 @@
      */
     function colorForDistKmGradient(d) {
       if (!Number.isFinite(d)) return "hsl(210 5% 65%)"; // gray
-      const dMin = 100, dMax = 10000;
+      const dMin = 1000, dMax = 6000;
       const t = clamp((d - dMin) / (dMax - dMin), 0, 1);
       const hue = lerp(130, 0, t); // 130→0
       return `hsl(${hue} 90% 45%)`;
@@ -326,7 +326,7 @@
           const data = await res.json();
           if (!Array.isArray(data)) throw new Error('Response is not a JSON array');
 
-          // 👇 Normalize to objects the rest of the app expects
+          // Normalize to objects the rest of the app expects
           const normalized = data.map((row, i) => {
             if (Array.isArray(row)) {
               const [lat, lon, alt] = row;

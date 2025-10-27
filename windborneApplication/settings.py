@@ -26,9 +26,29 @@ N2YO_OBSERVER = {
 }
 # The satellites to plot, keep small to preserver API limits
 SATELLITES = [
-    {"id": 25544, "name": "ISS (ZARYA)"},
-    {"id": 33591, "name": "HST (Hubble)"},
-    {"id": 20580, "name": "NOAA 12"},
+    {"id": 54234, "name": "NOAA-21 (JPSS-2)"},
+    {"id": 43013, "name": "NOAA 20 (JPSS 1)"},
+    {"id": 37849, "name": "SUOMI NPP"},
+    {"id": 33591, "name": "NOAA 19"},
+    {"id": 28654, "name": "NOAA 18"},
+    {"id": 27453, "name": "NOAA 17"},
+    {"id": 26536, "name": "NOAA 16"},
+    {"id": 25338, "name": "NOAA 15"},
+    {"id": 23455, "name": "NOAA 14"},
+    {"id": 22739, "name": "NOAA 13"},
+    {"id": 21263, "name": "NOAA 12"},
+    {"id": 19531, "name": "NOAA 11"},
+    {"id": 16969, "name": "NOAA 10"},
+    {"id": 15427, "name": "NOAA 9"},
+    {"id": 13923, "name": "NOAA 8"},
+    {"id": 12553, "name": "NOAA 7"},
+    {"id": 11416, "name": "NOAA 6"},
+    {"id": 11060, "name": "TIROS N"},
+    {"id": 9057,  "name": "NOAA 5"},
+    {"id": 7529,  "name": "NOAA 4"},
+    {"id": 6920,  "name": "NOAA 3"},
+    {"id": 6235,  "name": "NOAA 2 (ITOS-D)"},
+    {"id": 4793,  "name": "NOAA 1"},
 ]
 # How many seconds of positions to request (1 = single current point)
 N2YO_SECONDS = 1
