@@ -150,7 +150,7 @@
 
         balloon.bindPopup(
           `<strong>Point ${idx + 1}</strong><br/>Lat: ${lat.toFixed(4)}<br/>Lon: ${lon.toFixed(4)}` +
-          (alt !== undefined ? `<br/>Value: ${Number(alt).toFixed(3)}` : '')
+          (alt !== undefined ? `<br/>Alt: ${Number(alt).toFixed(3)}` : '')
         );
 
         balloon.addTo(balloonsLayer);
