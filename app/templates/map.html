@@ -40,6 +40,8 @@
     
     /*For satellite icon*/
     .sat-emoji-icon { font-size: 22px; line-height: 24px; text-align: center; }    
+    /* For balloon icon */
+      .balloon-icon { font-size: 22px; line-height: 22px; text-align: center; }
   </style>
 </head>
 <body>
@@ -54,8 +56,8 @@
 
   <div class="legend">
     <strong>Legend</strong><br/>
-    Circles show points from the API.<br/>
-    Popup shows the third value (e.g., magnitude).
+      🎈 shows points from the API.<br/>
+      Popup shows the altitude.
   </div>
 
   <script>
@@ -141,14 +143,14 @@
       const bounds = [];
       points.forEach((row, idx) => {
         // Expecting [lat, lon, value]
-        const [lat, lon, val] = row;
+        const [lat, lon, alt] = row;
         if (!isFinite(lat) || !isFinite(lon)) return;
 
-        const balloon = L.marker([pt.lat, pt.lon], { icon: balloonIcon });
+        const balloon = L.marker([lat, lon], { icon: balloonIcon });
 
         balloon.bindPopup(
           `<strong>Point ${idx + 1}</strong><br/>Lat: ${lat.toFixed(4)}<br/>Lon: ${lon.toFixed(4)}` +
-          (val !== undefined ? `<br/>Value: ${Number(val).toFixed(3)}` : '')
+          (alt !== undefined ? `<br/>Value: ${Number(alt).toFixed(3)}` : '')
         );
 
         balloon.addTo(balloonsLayer);
