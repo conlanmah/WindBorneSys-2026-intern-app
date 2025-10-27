@@ -1,10 +1,10 @@
 # WindBorneSys-2026-intern-app
 This is my coding challenge for the WindBorne Systems 2026 internship application.
 
-View the live site here: https://windborne-applicaiton-production.up.railway.app/
+View the live site here (note: it's a bit slow to load): https://windborne-applicaiton-production.up.railway.app/
 Although I likely have stopped paying for Railway credits.
 
-[Screenshot showing a world map with colored dots and satellites](/screenshots/Screenshot From 2025-10-27 15-01-20.png?raw=true)
+![World map with colored dots and satellites](./screenshots/Screenshot%20From%202025-10-27%2015-01-20.png)
 
 # Explanation
 
